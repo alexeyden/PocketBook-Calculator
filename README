@@ -1,0 +1,5 @@
+This is scientific calculator for Pocket Book readers with e-ink display (tested only on PB Pro 912).
+Build instructions (with PB Free SDK):
+	1. cmake .
+	2. ./makearm.sh (or ./makepc.sh to test it in emulator)
+	3. copy ecalc to /applications/ecalc.app
