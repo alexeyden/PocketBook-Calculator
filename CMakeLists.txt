@@ -106,7 +106,7 @@ ENDIF (CMAKE_BUILD_TYPE STREQUAL "Debug")
 
 SET (SRC_LIST
 	${CMAKE_SOURCE_DIR}/src/fparser.cc
-	${CMAKE_SOURCE_DIR}/src/test.cpp
+	${CMAKE_SOURCE_DIR}/src/main.cpp
 )	
 
 ADD_EXECUTABLE (ecalc
