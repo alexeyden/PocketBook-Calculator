@@ -104,12 +104,9 @@ ELSE ()
 
 ENDIF (CMAKE_BUILD_TYPE STREQUAL "Debug")
 
-# генерировать файл image.c
-
 SET (SRC_LIST
-	${CMAKE_SOURCE_DIR}/src/test.cpp
 	${CMAKE_SOURCE_DIR}/src/fparser.cc
-	${CMAKE_SOURCE_DIR}/src/fpoptimizer.cc
+	${CMAKE_SOURCE_DIR}/src/test.cpp
 )	
 
 ADD_EXECUTABLE (ecalc

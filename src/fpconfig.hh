@@ -68,10 +68,10 @@
  If you are unsure, just leave it. It won't slow down the other parts of
  the library.
 */
-#ifndef FP_NO_SUPPORT_OPTIMIZER
+/*#ifndef FP_NO_SUPPORT_OPTIMIZER
 #define FP_SUPPORT_OPTIMIZER
 #endif
-
+*/
 #if defined(FP_SUPPORT_COMPLEX_DOUBLE_TYPE) || defined(FP_SUPPORT_COMPLEX_FLOAT_TYPE) || defined(FP_SUPPORT_COMPLEX_LONG_DOUBLE_TYPE)
 #define FP_SUPPORT_COMPLEX_NUMBERS
 #endif
