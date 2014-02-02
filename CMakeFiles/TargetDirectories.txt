@@ -1,1 +1,0 @@
-/home/rtgbnm/projects/sources/inkdemo/CMakeFiles/ecalc.dir

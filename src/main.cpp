@@ -15,14 +15,22 @@
 #define uint unsigned int
 #define ushort unsigned short
 
-#define __DBG(x) std::cout << "__DBG in " << __FUNCTION__ << " at line " <<  __LINE__ << ": " << x << std::endl;
+#define __DEBUG_ENABLED
+
+#ifdef __DEBUG_ENABLED
+	#define __DBG(x) std::cout << "__DBG in " << __FUNCTION__ << " at line " <<  __LINE__ << ": " << x << std::endl;
+#else
+	#define __DBG(x) ;
+#endif
+
+const unsigned EVT_BASE = 2000;
 //TODO: split this file
-const unsigned EVT_BUTTON_ACTIVATE = 810; //button click
-const unsigned EVT_CALC_BUTTON_ACTIVATE = 811; //click on a calcbutton
-const unsigned EVT_TEXTBOX_POSITION = 812; //sent when changing cursor position in textbox
-const unsigned EVT_MENU_SELECT = 813; //sent when menu item is activated
-const unsigned EVT_LIST_ACTION = 814; //FullscreenList action (e.g. close, open, menu)
-const unsigned EVT_KEYBOARD = 815; //sent when the keyboard is closed
+const unsigned EVT_BUTTON_ACTIVATE = EVT_BASE + 1; //button click
+const unsigned EVT_CALC_BUTTON_ACTIVATE = EVT_BASE + 2; //click on a calcbutton
+const unsigned EVT_TEXTBOX_POSITION = EVT_BASE + 3; //sent when changing cursor position in textbox
+const unsigned EVT_MENU_SELECT = EVT_BASE + 4; //sent when menu item is activated
+const unsigned EVT_LIST_ACTION = EVT_BASE + 5; //FullscreenList action (e.g. close, open, menu)
+const unsigned EVT_KEYBOARD = EVT_BASE + 6; //sent when the keyboard is closed
 
 using std::string;
 using std::vector;
@@ -42,6 +50,7 @@ public:
 		this->m_w = 0;
 		this->m_h = 0;
 		this->m_font = NULL;
+		this->m_visible = true;
 
 		m_all_widgets[this->getID()] = this;
 	}
@@ -54,6 +63,7 @@ public:
 		this->m_w = w;
 		this->m_h = h;
 		this->m_font = NULL;
+		this->m_visible = true;
 
 		m_all_widgets[this->getID()] = this;
 	}
@@ -116,6 +126,30 @@ public:
 		this->m_y = y;
 	}
 
+	void setVisibility(bool is_visible) {
+		m_visible = is_visible;
+	}
+	
+	bool getVisibility() const {
+		return m_visible;
+	}
+	
+	static void hideAll() {
+		for(std::map<unsigned, Widget*>::iterator it = m_all_widgets.begin();
+			it != m_all_widgets.end(); it++)
+		{
+			(*it).second->setVisibility(false);
+		}
+	}
+	
+	static void showAll() {
+		for(std::map<unsigned, Widget*>::iterator it = m_all_widgets.begin();
+			it != m_all_widgets.end(); it++)
+		{
+			(*it).second->setVisibility(true);
+		}
+	}
+	
 	static void processEvent(unsigned id, unsigned param1, unsigned param2) {
 		if(id == EVT_KEYRELEASE) {
 			if(m_focus) {
@@ -129,7 +163,7 @@ public:
 				Widget* w = (*it).second;
 				if(param1 >= w->m_x && param2 >= w->m_y &&
 				   param1 < (w->m_x + w->m_w) &&
-				   param2 < (w->m_y + w->m_h)) {
+				   param2 < (w->m_y + w->m_h) && w->getVisibility()) {
 					if(id != EVT_POINTERLONG)
 						w->onTouchDown(param1, param2);
 					else
@@ -143,12 +177,17 @@ public:
 	static void drawAll() {
 		for(std::map<unsigned, Widget*>::iterator it = m_all_widgets.begin();
 		    it != m_all_widgets.end();
-		    it++) {
-			(*it).second->draw();
+		    it++)
+		{
+			if((*it).second->getVisibility())
+				(*it).second->draw();
 		}
 	}
 
 	static void setFocus(Widget* focus, bool update_previous = false) {
+		if(!focus->getVisibility())
+			return;
+		
 		Widget* tmp = m_focus;
 		m_focus = focus;
 
@@ -205,6 +244,8 @@ protected:
 	unsigned m_y;
 	unsigned m_w;
 	unsigned m_h;
+	bool m_visible;
+	
 	static Widget* m_focus;
 
 	ifont* m_font;
@@ -445,7 +486,9 @@ private:
 
 	void onKeyUp(unsigned key) {
 		if(key == KEY_OK) {
+			__DBG("sending event");
 			SendEvent(&global_event_handler, c_activate_event, this->getID(), 0);
+			__DBG("event sent");
 		}
 	}
 
@@ -474,6 +517,7 @@ class TextBox : public Widget {
 public:
 	TextBox() : Widget() {
 		m_drawCursor = false;
+		m_pos = 0;
 	}
 
 	void insert(const string& str, unsigned pos) {
@@ -622,6 +666,35 @@ private:
 	unsigned m_pos;
 	vector<string> m_words;
 	bool m_drawCursor;
+};
+
+/* ************************ Text view *************************************** */
+
+class TextView : public Widget {
+public:
+	TextView(const char* text) : Widget() {
+		m_text = string(text);
+	}
+	
+	void draw() const {
+		SetFont(const_cast<ifont*>(getFont()), BLACK);
+		FillArea(m_x, m_y, m_w, m_h, WHITE);
+		
+		DrawTextRect(m_x, m_y, m_w, m_h, m_text.c_str(), ALIGN_LEFT);
+	}
+	
+	unsigned getMinWidth() const {
+		return CharWidth('#') * sqrt(m_text.length()) + 8 + 10;
+	}
+	
+	unsigned getMinHeight() const {
+		return getMinWidth();
+	}
+protected:
+	void onTouchDown(unsigned, unsigned) {}
+	void onKeyUp(unsigned) {}
+private:
+	string m_text;
 };
 
 /* *** Simple (no submenu) wrapper for built-in inkview menu  *************** */
@@ -910,6 +983,7 @@ public:
 		m_menu->append(ITEM_ACTIVE, c_menu_eval, "Keyboard");
 		m_menu->append(ITEM_ACTIVE, c_menu_custom, "Expressions");
 		m_menu->append(ITEM_ACTIVE, c_menu_history, "History");
+		m_menu->append(ITEM_ACTIVE, c_menu_help, "Help");
 		m_menu->append(ITEM_SEPARATOR, 0, NULL);
 		m_menu->append(ITEM_ACTIVE, c_menu_exit, "Exit");
 
@@ -941,6 +1015,12 @@ public:
 		    ScreenHeight() - c_padding * 2 - m_answerBox->getY() - m_answerBox->getHeight() - c_padding,
 		    c_layout_sp
 		);
+		
+		m_helpView = new TextView(c_help_msg);
+		m_helpView->setPos(c_padding, c_padding);
+		m_helpView->setSize(ScreenWidth() - 2 * c_padding,
+							ScreenHeight() - 2 * c_padding);
+		m_helpView->setVisibility(false);
 
 		for(unsigned row = 0; row < CFG_GRID_ROWS; row++) {
 			for(unsigned col = 0; col < CFG_GRID_COLS; col++) {
@@ -982,6 +1062,7 @@ public:
 		delete m_exprList;
 		delete m_historyList;
 		delete m_buttonsLayout;
+		delete m_helpView;
 		CloseFont(const_cast<ifont*>(Widget::getGlobalFont()));
 		CloseFont(m_textboxFont);
 		delete m_fparser;
@@ -990,218 +1071,40 @@ public:
 
 	void redraw() const {
 		ClearScreen();
-		m_buttonsLayout->__debug_draw();
 		Widget::drawAll();
 		FullUpdate();
 	}
 
-	/*TODO: maybe split this monster function into small ones */
 	int event(int event, int param1, int param2) {
 		switch(event) {
 			case EVT_SHOW:
 				redraw();
 				break;
-			case EVT_CALC_BUTTON_ACTIVATE: {
-				CalcButton* btn = static_cast<CalcButton*>(Widget::getByID(param1));
-
-				unsigned r, c;
-				for(r = 0; r < CFG_GRID_ROWS; r++)
-					for(c = 0; c < CFG_GRID_COLS; c++) {
-						if((*m_buttonsLayout) [r][c] == btn)
-							goto found_widget;
-					}
-			found_widget:
-				m_focusedBtnRow = r;
-				m_focusedBtnCol = c;
-
-				unsigned i = 0;
-				while(btn->getFunc()->str[i][0] != '\0') {
-					m_inputBox->insert(string(btn->getFunc()->str[i++]), m_inputBox->getTextPos());
-					m_inputBox->setTextPos(m_inputBox->getTextPos() + 1);
-				}
-				m_inputBox->setTextPos(m_inputBox->getTextPos() - btn->getFunc()->pos);
-				m_inputBox->draw();
-				m_inputBox->update();
-			}
+			case EVT_CALC_BUTTON_ACTIVATE: 
+				__DBG("got event from calc button")
+				onCalcButtonPressed(param1);
 			break;
-			case EVT_BUTTON_ACTIVATE: {
-				if((unsigned) param1 == m_buttonClear->getID() && param2) {
-					m_inputBox->clear();
-					m_inputBox->update();
-				}
-				else if((unsigned) param1 == m_buttonClear->getID() && !param2) {
-					if(m_inputBox->getTextPos() != 0) {
-						m_inputBox->words().erase(m_inputBox->words().begin() + m_inputBox->getTextPos() - 1);
-						m_inputBox->setTextPos(m_inputBox->getTextPos() - 1);
-						m_inputBox->draw();
-						m_inputBox->update();
-					}
-				}
-				else if((unsigned) param1 == m_buttonCalculate->getID()) {
-					bool result = evalAndDisplay(m_inputBox->getString());
-					if(result)
-						historyAppend(m_inputBox->words());
-					
-					m_inputBox->clear();
-					m_inputBox->draw();
-					m_inputBox->asyncUpdate();
-				}
-				else if((unsigned) param1 == m_buttonExpr->getID()) {
-					m_exprList->show();
-				}
-			}
+			case EVT_BUTTON_ACTIVATE:
+				__DBG("got event from button")
+				onButtonPressed(param1, param2);
 			break;
-			case EVT_LIST_ACTION: {
-				if(param2 == LIST_MENU) {
-					if((param1 % 1000) == 999) {      //no items are selected
-						m_listMenu->setActive(c_menu_list_edit, false);
-						m_listMenu->setActive(c_menu_list_remove, false);
-					}
-
-					m_listMenu->show();
-
-					m_listMenu->setActive(c_menu_list_edit, true);
-					m_listMenu->setActive(c_menu_list_remove, true);
-				}
-				else if(param2 == LIST_OPEN) {
-					if((uint)param1/1000 == m_exprList->getID()) {
-						__DBG("expr")
-						uint index = param1 % 1000;
-						string name1;
-						string::iterator lbrace = std::find(m_customExpr[index].first.begin(),
-						                                    m_customExpr[index].first.end(),
-						                                    '(');
-
-						std::copy(m_customExpr[index].first.begin(),
-						          lbrace,
-						          std::back_inserter(name1)
-						         );
-
-						name1.push_back('(');
-
-						m_inputBox->insert(name1, m_inputBox->getTextPos());
-						m_inputBox->insert(")", m_inputBox->getTextPos() + 1);
-						m_inputBox->asyncUpdate();
-						m_inputBox->setTextPos(m_inputBox->getTextPos() + 1);
-						
-						m_exprList->hide();
-					}
-					else if((uint)param1/1000 == m_historyList->getID()) {
-						__DBG("history")
-						uint index = param1 % 1000;
-						m_inputBox->clear();
-
-						for(vector<string>::iterator it = m_history[index].begin(); it != m_history[index].end(); it++)
-							m_inputBox->append(*it);
-
-						m_inputBox->setTextPos(m_inputBox->words().size() - 1);
-						m_inputBox->asyncUpdate();
-						
-						m_historyList->hide();
-					}
-				}
-			}
+			case EVT_LIST_ACTION:
+				onListItemActivated(param1, param2);
 			break;
 			case EVT_MENU_SELECT:
-				if(param1 == 0) {    //app menu
-					switch(param2) {
-						case c_menu_exit:
-							CloseApp();
-							break;
-						case c_menu_eval: {
-							Keyboard::show("Enter an expression to evaluate", m_inputBox->getString(), c_menu_eval);
-						}
-						break;
-						case c_menu_custom: {
-							m_exprList->show();
-						}
-						break;
-						case c_menu_history: {
-							//rebuild history
-							//TODO: cut long lines
-							m_historyList->clear();
-							__DBG(m_history.size())
-							for(uint i = 0; i < m_history.size(); i++) {
-								string hist_ent;
-								//for_each(.. ,bind1st(mem_fun,..))
-								for(uint j = 0; j < m_history[i].size(); j++)
-									hist_ent.append(m_history[i][j]);
-								m_historyList->append(hist_ent.c_str());
-							}
-							m_historyList->show();
-						}
-						break;
-						default:
-							break;
-					}
-				}
-				else if(param1 == 1) {      //expr list menu
-					switch(param2) {
-						case c_menu_list_add: {
-							Keyboard::show("Add expression", "f(x,y) = x^y", c_menu_list_add);
-						}
-						break;
-						case c_menu_list_edit: {
-							Keyboard::show("Edit expression",
-							               m_customExpr[m_exprList->getSelected()].first +
-							               " = " +
-							               m_customExpr[m_exprList->getSelected()].second,
-							               c_menu_list_edit
-							              );
-						}
-						break;
-						case c_menu_list_remove:
-							m_customExpr.erase(m_customExpr.begin() + m_exprList->getSelected());
-							m_exprList->remove(m_exprList->getSelected());
-							break;
-					}
-				}
+				onMenuSelect(param1, param2);
 				break;
 			case EVT_KEYBOARD:
-				if(param2 == -1)    //input canceled
-					break;
-
-				if((uint) param1 == c_menu_list_add) {
-					try {
-						string name, body, var;
-						parseExpression(Keyboard::getText().c_str(), name, body, var);
-						m_exprList->append(addExpression(name, body, var).c_str());
-						m_customExpr.push_back(std::pair<string, string> (name, body));
-					}
-					catch(const string& s) {
-						Message(ICON_ERROR, "Invalid expression", s.c_str(), 10);
-					}
-				}
-				else if((uint) param1 == c_menu_list_edit) {
-					try {
-						string name, body, var;
-						parseExpression(Keyboard::getText(), name, body, var);
-						m_customExpr[m_exprList->getSelected()] = std::pair<string, string> (name, body);
-						m_exprList->edit(m_exprList->getSelected(), name);
-						delete m_fparser;
-						initParser();
-					}
-					catch(const string& s) {
-						Message(ICON_ERROR, "Invalid expression", s.c_str(), 10);
-					}
-				}
-				else if((uint) param1 == c_menu_eval) {
-					string kbd_str = Keyboard::getText();
-					bool res = evalAndDisplay(kbd_str);
-					if(!res)
-						break;
-					
-					vector<string> hist_ent;
-					for(string::iterator it = kbd_str.begin(); it != kbd_str.end(); it++)
-						hist_ent.push_back(string(1, *it));
-					historyAppend(hist_ent);
-					
-					m_inputBox->clear();
-					m_inputBox->draw();
-					m_inputBox->update();
-				}
+				onKeyboard(param1, param2);
 				break;
 			case EVT_KEYPRESS:
+				if(m_helpView->getVisibility() == true) {
+					Widget::showAll();
+					m_helpView->setVisibility(false);
+					redraw();
+					break;
+				}
+				
 				if(param1 == KEY_DOWN) {
 					if(!moveFocus('d'))
 						break;
@@ -1236,6 +1139,221 @@ public:
 	}
 
 private:
+	void onCalcButtonPressed(int id) {
+		CalcButton* btn = static_cast<CalcButton*>(Widget::getByID(id));
+		__DBG("found btn" << btn);
+		unsigned r, c;
+		for(r = 0; r < CFG_GRID_ROWS; r++)
+			for(c = 0; c < CFG_GRID_COLS; c++) {
+				if((*m_buttonsLayout) [r][c] == btn)
+					goto found_widget;
+			}
+		found_widget:
+		m_focusedBtnRow = r;
+		m_focusedBtnCol = c;
+		__DBG("got row and col" << r << " " << c)
+		__DBG("btn func: " << btn->getFunc()->str[0])
+		unsigned i = 0;
+		while(btn->getFunc()->str[i][0] != '\0') {
+			__DBG("iter " << i)
+			m_inputBox->insert(string(btn->getFunc()->str[i++]), m_inputBox->getTextPos());
+			__DBG("\tinsert ok")
+			m_inputBox->setTextPos(m_inputBox->getTextPos() + 1);
+			__DBG("\ttext pos ok")
+		}
+		__DBG("input box pos set")
+		m_inputBox->setTextPos(m_inputBox->getTextPos() - btn->getFunc()->pos);
+		m_inputBox->draw();
+		m_inputBox->update();
+		__DBG("done")
+	}
+	
+	void onButtonPressed(int id, int long_press) {
+		if((unsigned) id == m_buttonClear->getID() && long_press) {
+			m_inputBox->clear();
+			m_inputBox->update();
+		}
+		else if((unsigned) id == m_buttonClear->getID() && !long_press) {
+			if(m_inputBox->getTextPos() != 0) {
+				m_inputBox->words().erase(m_inputBox->words().begin() + m_inputBox->getTextPos() - 1);
+				m_inputBox->setTextPos(m_inputBox->getTextPos() - 1);
+				m_inputBox->draw();
+				m_inputBox->update();
+			}
+		}
+		else if((unsigned) id == m_buttonCalculate->getID()) {
+			bool result = evalAndDisplay(m_inputBox->getString());
+			if(result)
+				historyAppend(m_inputBox->words());
+			
+			m_inputBox->clear();
+			m_inputBox->draw();
+			m_inputBox->asyncUpdate();
+		}
+		else if((unsigned) id == m_buttonExpr->getID()) {
+			m_exprList->show();
+		}
+	}
+	
+	void onListItemActivated(int partid, uint action) {
+		if(action == LIST_MENU) {
+			if((partid % 1000) == 999) {      //no items are selected
+				m_listMenu->setActive(c_menu_list_edit, false);
+				m_listMenu->setActive(c_menu_list_remove, false);
+			}
+			
+			m_listMenu->show();
+			
+			m_listMenu->setActive(c_menu_list_edit, true);
+			m_listMenu->setActive(c_menu_list_remove, true);
+		}
+		else if(action == LIST_OPEN) {
+			if((uint)partid/1000 == m_exprList->getID()) {
+				__DBG("expr")
+				uint index = partid % 1000;
+				string name1;
+				string::iterator lbrace = std::find(m_customExpr[index].first.begin(),
+													m_customExpr[index].first.end(),
+													'(');
+				
+				std::copy(
+					m_customExpr[index].first.begin(),
+					lbrace,
+					std::back_inserter(name1)
+				);
+				
+				name1.push_back('(');
+				
+				m_inputBox->insert(name1, m_inputBox->getTextPos());
+				m_inputBox->insert(")", m_inputBox->getTextPos() + 1);
+				m_inputBox->asyncUpdate();
+				m_inputBox->setTextPos(m_inputBox->getTextPos() + 1);
+				
+				m_exprList->hide();
+			}
+			else if((uint)partid/1000 == m_historyList->getID()) {
+				__DBG("history")
+				uint index = partid % 1000;
+				m_inputBox->clear();
+				
+				for(vector<string>::iterator it = m_history[index].begin(); it != m_history[index].end(); it++)
+					m_inputBox->append(*it);
+				
+				m_inputBox->setTextPos(m_inputBox->words().size() - 1);
+				m_inputBox->asyncUpdate();
+				
+				m_historyList->hide();
+			}
+		}
+	}
+	
+	void onMenuSelect(int id, int item_id) {
+		if(id == 0) {    //app menu
+			switch(item_id) {
+				case c_menu_exit:
+					CloseApp();
+					break;
+				case c_menu_eval: {
+					Keyboard::show("Enter an expression to evaluate", m_inputBox->getString(), c_menu_eval);
+				}
+				break;
+				case c_menu_custom: {
+					m_exprList->show();
+				}
+				break;
+				case c_menu_history: {
+					//rebuild history
+					//TODO: cut long lines
+					m_historyList->clear();
+					__DBG(m_history.size())
+					for(uint i = 0; i < m_history.size(); i++) {
+						string hist_ent;
+						//for_each(.. ,bind1st(mem_fun,..))
+						for(uint j = 0; j < m_history[i].size(); j++)
+							hist_ent.append(m_history[i][j]);
+						m_historyList->append(hist_ent.c_str());
+					}
+					m_historyList->show();
+				}
+				break;
+				case c_menu_help:
+					Widget::hideAll();
+					m_helpView->setVisibility(true);
+					m_helpView->draw();
+					m_helpView->update();
+				break;
+				default:
+					break;
+			}
+		}
+		else if(id == 1) {      //expr list menu
+			switch(item_id) {
+				case c_menu_list_add: {
+					Keyboard::show("Add expression", "f(x,y) = x^y", c_menu_list_add);
+				}
+				break;
+				case c_menu_list_edit: {
+					Keyboard::show("Edit expression",
+								   m_customExpr[m_exprList->getSelected()].first +
+								   " = " +
+								   m_customExpr[m_exprList->getSelected()].second,
+								   c_menu_list_edit
+					);
+				}
+				break;
+				case c_menu_list_remove:
+					m_customExpr.erase(m_customExpr.begin() + m_exprList->getSelected());
+					m_exprList->remove(m_exprList->getSelected());
+					break;
+			}
+		}
+	}
+	
+	void onKeyboard(int caller, int action) {
+		if(action == -1)    //input canceled
+			return;
+		
+		if((uint) caller == c_menu_list_add) {
+			try {
+				string name, body, var;
+				parseExpression(Keyboard::getText().c_str(), name, body, var);
+				m_exprList->append(addExpression(name, body, var).c_str());
+				m_customExpr.push_back(std::pair<string, string> (name, body));
+			}
+			catch(const string& s) {
+				Message(ICON_ERROR, "Invalid expression", s.c_str(), 10);
+			}
+		}
+		else if((uint) caller == c_menu_list_edit) {
+			try {
+				string name, body, var;
+				parseExpression(Keyboard::getText(), name, body, var);
+				m_customExpr[m_exprList->getSelected()] = std::pair<string, string> (name, body);
+				m_exprList->edit(m_exprList->getSelected(), name);
+				delete m_fparser;
+				initParser();
+			}
+			catch(const string& s) {
+				Message(ICON_ERROR, "Invalid expression", s.c_str(), 10);
+			}
+		}
+		else if((uint) caller == c_menu_eval) {
+			string kbd_str = Keyboard::getText();
+			bool res = evalAndDisplay(kbd_str);
+			if(!res)
+				return;
+			
+			vector<string> hist_ent;
+			for(string::iterator it = kbd_str.begin(); it != kbd_str.end(); it++)
+				hist_ent.push_back(string(1, *it));
+			historyAppend(hist_ent);
+			
+			m_inputBox->clear();
+			m_inputBox->draw();
+			m_inputBox->update();
+		}
+	}
+	
 	void initParser() {
 		m_fparser = new FunctionParser();
 		m_fparser->AddConstant("pi", M_PI);
@@ -1299,9 +1417,10 @@ private:
 	void writeConfig() {
 		iconfig* cfg = OpenConfig(c_config, NULL);
 		uint expr_str_size = 0;
-		for(uint i = 0; i < m_customExpr.size(); i++)
+		for(uint i = 0; i < m_customExpr.size(); i++) {
 			// f(x) + " = " + body + '\n'
 			expr_str_size += m_customExpr[i].first.size() + 3 + m_customExpr[i].second.size() + 1;
+		}
 		expr_str_size++;
 
 		char* expressions = new char[expr_str_size];
@@ -1348,7 +1467,6 @@ private:
 		body = "";
 		variables = "";
 
-
 		std::getline(iss, name, '=');
 		std::getline(iss, body);
 		if(std::find(name.begin(), name.end(), '(') != name.end())
@@ -1359,14 +1477,19 @@ private:
 			);
 
 		//trim spaces
-		body.erase(body.begin(),
-		           std::find_if(body.begin(), body.end(),
-		                        std::not1(std::ptr_fun<int, int> (std::isspace)))
-		          );
-		name.erase(std::find_if(name.rbegin(), name.rend(),
-		                        std::not1(std::ptr_fun<int, int> (std::isspace))).base(),
-		           name.end()
-		          );
+		body.erase(
+			body.begin(),
+			std::find_if(
+				body.begin(), body.end(),
+				std::not1(std::ptr_fun<int, int> (std::isspace))
+			)
+		);
+		name.erase(
+			std::find_if(
+				name.rbegin(), name.rend(),
+				std::not1(std::ptr_fun<int, int> (std::isspace))).base(),
+			name.end()
+		);
 
 		return true;
 	}
@@ -1391,6 +1514,46 @@ private:
 		return name;
 	}
 
+	bool processAssignment(const string& expression) {
+		std::istringstream iss(expression);
+		
+		string name = "";
+		string body = "";
+		const string assign_op = ":=";
+		
+		std::size_t pos = expression.find(assign_op);
+		if(pos != std::string::npos) {
+			name = expression.substr(0, pos);
+			body = expression.substr(pos + assign_op.length());
+		} else {
+			return false;
+		}
+		
+		name.erase(
+			std::find_if(
+				name.rbegin(), name.rend(),
+				std::not1(std::ptr_fun<int, int> (std::isspace))).base(),
+			name.end()
+		);
+		
+		string variables = "abcd";
+		size_t var_index = name[0]  - 'a' + 1;
+		__DBG("assign var idx is " << var_index);
+		__DBG("assign var is " << name[0]);
+		__DBG("assign body is " << body);
+		if(variables.find(name) != std::string::npos) {
+			double value = evalExpression(body);
+			__DBG("assign prev value is " << m_variables[var_index]);
+			m_variables[var_index] = value;
+			__DBG("assign value is " << m_variables[var_index]);
+		}
+		else {
+			throw string("Assigned variable error");
+		}
+		
+		return true;
+	}
+	
 	double evalExpression(const string& expression) {
 		//TODO: automatical variable appending
 		int parser_result = m_fparser->Parse(expression, "ans,a,b,c,d");
@@ -1416,6 +1579,10 @@ private:
 
 		double result = 0.0;
 		try {
+			bool has_assign = processAssignment(expression);
+			if(has_assign)
+				return true;
+			
 			result = evalExpression(expression);
 		}
 		catch(const string& errMsg) {
@@ -1545,9 +1712,11 @@ private:
 	}
 
 	void focusAndUpdate(Widget* w) {
-		Widget::setFocus(w, true);
-		w->draw();
-		w->update();
+		if(w->getVisibility()) {
+			Widget::setFocus(w, true);
+			w->draw();
+			w->update();
+		}
 	}
 
 	unsigned gridRowNextCell(int col, bool dir_right) {
@@ -1581,6 +1750,7 @@ private:
 	static const uint c_menu_exit = 2;
 	static const uint c_menu_custom = 3;
 	static const uint c_menu_history = 4;
+	static const uint c_menu_help = 5;
 
 	static const uint c_menu_list_add = 5;
 	static const uint c_menu_list_remove = 6;
@@ -1589,11 +1759,13 @@ private:
 	static const uint c_history_size = 20;
 
 	static const char c_config[];
-
+	static const char c_help_msg[];
+	
 	unsigned m_focusedBtnRow;
 	unsigned m_focusedBtnCol;
 	double* m_variables;
 
+	TextView* m_helpView;
 	Menu* m_menu;
 	Menu* m_listMenu;
 	FullscreenList* m_exprList;
@@ -1611,7 +1783,36 @@ private:
 };
 
 const char Application::c_config[] = CONFIGPATH "/ecalc.cfg";
-
+const char Application::c_help_msg[] =
+	"HELP (Press any key to exit)\n\n"
+	"MAIN SCREEN BUTTONS\n"
+	"    * \" = \" evaluate and show result\n"
+	"    * \" ← \" works like Backspace key on short press,\n"
+	"              and clears all on long press\n"
+	"    * \" . \" (dot) inserts decimal separator\n"
+	"    * \" :=  \" is assignment operator\n"
+	"                (syntax: <VARIABLE>:=<EXPRESSION>)\n"
+	"    * \" E \" inserts \"*10^()\"\n"
+	"    * \" exp \" is exponential function\n"
+	"    * \" pi \" inserts Pi constant\n"
+	"    * \" expr \" shows a list of user-defined functions\n"
+	"    * \" rad \", \" deg \" radians <-> degrees conversion\n"
+	"                           functions \n"
+	"    * \" abs \" is absolute value function\n"
+	"    * \" ans \" inserts variable that holds previous answer\n"
+	"    * \" , \" is used as function parameters separator\n"
+	"    * \"a\",\"b\",\"c\",\"d\" preset variable names to use\n"
+	"                              with \":=\" operator\n"
+	"MENU ITEMS\n"
+	"    * \"Keyboard\" - enter an expresion using\n"
+	"                     standart keyboard\n"
+	"    * \"Expressions\" - show user-defined expressions\n"
+	"                        you can add, edit, and delete\n"
+	"                        them using popup menu\n"
+	"    * \"History\" - history of entered expressions\n"
+	"    * \"Help\" - this help\n"
+	"    * \"Exit\" - guess what?\n";
+	
 /* ********************** Event loop and main() ***************************** */
 
 Application* app = NULL;
