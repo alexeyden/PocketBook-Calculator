@@ -4,9 +4,11 @@ This is a scientific calculator for Pocket Book readers with e-ink display (test
 
 ###Building
 Build instructions (with PB Free SDK):
-1. cmake .
-2. ./makearm.sh (or ./makepc.sh to test it in emulator)
-3. copy SciCalc to /applications/SciCalc.app
+```
+$ cmake .
+$ ./makearm.sh (or ./makepc.sh to test it in emulator)
+$ copy SciCalc to /applications/SciCalc.app
+```
 
 ###Features
 * All common math functions. This program uses fparser library, so almost all functions provided by this library are avaliable (except functions related to complex numbers). Full list is here: http://warp.povusers.org/FunctionParser/fparser.html#identifiers
