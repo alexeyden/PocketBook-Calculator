@@ -9,10 +9,7 @@ Build instructions (with PB Free SDK):
 3. copy SciCalc to /applications/SciCalc.app
 
 ###Features
-* All common math functions. This program uses fparser library, so almost all functions provided by this library are avaliable (except functions related to complex numbers).
-
-Full list is here:
-http://warp.povusers.org/FunctionParser/fparser.html#identifiers
+* All common math functions. This program uses fparser library, so almost all functions provided by this library are avaliable (except functions related to complex numbers). Full list is here: http://warp.povusers.org/FunctionParser/fparser.html#identifiers
 * User-defined functions\constants.
 * History
 * Support for multiple screen sizes (only 800x600 and 828x1200 are tested).
